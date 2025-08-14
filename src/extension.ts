@@ -12,25 +12,46 @@ import * as fs from 'fs'
 import * as path from 'path'
 
 // maps containing folder name to list of author completions
-const AuthorCompletionCache = new Map<string, string[]>()
+type Completions = {
+	latestModification: number,
+	completions: string[],
+}
+const AuthorCompletionCache = new Map<string, Completions>()
 
 async function getAuthorCompletions(folderPath: string): Promise<string[]> {
+	const completionFile = path.join(folderPath, "authors_completion.txt")
+
 	let completions = AuthorCompletionCache.get(folderPath)
 	if (!bebras.util.isUndefined(completions)) {
-		// TODO check if file not newer
-		return completions
+		let needsReload = false
+		if (fs.existsSync(completionFile)) {
+			const stats = fs.statSync(completionFile)
+			if (stats.mtimeMs > completions.latestModification) {
+				// file is newer than the cached version
+				needsReload = true
+			}
+		}
+		if (!needsReload) {
+			// console.log("using cached completions for: ", folderPath)
+			return completions.completions
+		}
 	}
-	const completionFile = path.join(folderPath, "authors_completion.txt")
-	completions = []
+
 	if (fs.existsSync(completionFile)) {
 		// console.log("loading completions from: ", completionFile)
+		const stats = fs.statSync(completionFile)
 		const lines = await fs.promises.readFile(completionFile, "utf8")
-		completions = lines.split(/\r?\n/).filter(l => l.length > 0)
+		const completionLines = lines.split(/\r?\n/).filter(l => l.length > 0)
+		completions = {
+			latestModification: stats.mtimeMs,
+			completions: completionLines.map(line => line.trim()),
+		}
+		AuthorCompletionCache.set(folderPath, completions)
+		return completionLines
 	} else {
-		// console.log("missing file: ", completionFile)
+		// console.log("missing completion file: ", completionFile)
+		return []
 	}
-	AuthorCompletionCache.set(folderPath, completions)
-	return completions
 }
 
 let DiscordLinkCache = undefined as undefined | {
