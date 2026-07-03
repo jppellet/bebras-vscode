@@ -49,7 +49,7 @@ async function getAuthorCompletions(folderPath: string): Promise<string[]> {
 		AuthorCompletionCache.set(folderPath, completions)
 		return completionLines
 	} else {
-		// console.log("missing completion file: ", completionFile)
+		console.log("Missing authors completion file: ", completionFile)
 		return []
 	}
 }
@@ -211,9 +211,16 @@ function didSaveTextDocument(doc: vscode.TextDocument) {
 		lint(doc)
 		suppressLint(doc)
 
-		const autoExportLatex = vscode.workspace.getConfiguration("bebras").get("autoExportLatexOnSave", false as boolean)
+		const settingsConfig = vscode.workspace.getConfiguration("bebras")
+
+		const autoExportLatex = settingsConfig.get("autoExportLatexOnSave", false as boolean)
 		if (autoExportLatex) {
 			vscode.commands.executeCommand("bebrasmd.exportTex", { neverOpenAfterExport: true })
+		}
+
+		const autoExportServer = settingsConfig.get("autoExportServerOnSave", false as boolean)
+		if (autoExportServer) {
+			vscode.commands.executeCommand("bebrasmd.exportServerHtml", { neverOpenAfterExport: true })
 		}
 	}
 }
@@ -314,6 +321,7 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('bebrasmd.exportPdf', loggingErrors(makeExportHandler("pdf"))),
 		vscode.commands.registerCommand('bebrasmd.exportTex', loggingErrors(makeExportHandler("tex"))),
 		vscode.commands.registerCommand('bebrasmd.exportTexAndOpen', loggingErrors(makeExportHandler("tex", true))),
+		vscode.commands.registerCommand('bebrasmd.exportServerHtml', loggingErrors(mergeToServer)),
 		vscode.commands.registerCommand('bebrasmd.formatTable', loggingErrors(formatTable)),
 		vscode.commands.registerCommand('bebrasmd.openDiscord', loggingErrors(openDiscord)),
 		vscode.languages.registerCompletionItemProvider(taskDocSelector, authorCompletion),
@@ -481,6 +489,29 @@ function getConfigCustomQuotes(): [string, string] | [string, string, string, st
 		return bebras.convert_html.parseQuotes(customQuotes)
 	}
 	return undefined
+}
+
+async function mergeToServer() {
+	const editor = vscode.window.activeTextEditor
+	if (!editor) {
+		return
+	}
+
+	const doc = editor.document
+	if (!isTask(doc)) {
+		return
+	}
+
+	const taskFile = doc.uri.fsPath
+
+	const server = bebras.cli.bebras_server
+	const [taskSpecs, context] = server.buildTaskSpecsFromFiles([taskFile], false)
+
+	const modifiedFiles = await server.runInsertTaskOn(taskSpecs, ["answer", "itsinformatics"], true, false, context)
+	if (modifiedFiles.length !== 0) {
+		vscode.window.setStatusBarMessage("Wrote " + modifiedFiles[0], 2000)
+	}
+
 }
 
 function makeExportHandler(outputFormat: bebras.util.OutputFormat, forceOpenAfterExport: boolean = false) {
