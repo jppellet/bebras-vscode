@@ -1,6 +1,6 @@
 {
 	"name": "bebras-vscode",
-	"version": "0.7.1",
+	"version": "0.7.2",
 	"displayName": "VS Code Support for Bebras Tasks",
 	"description": "Support for Bebras task edition in Markdown",
 	"publisher": "bebras-ch",
@@ -240,6 +240,6 @@
 		"mocha": "^9.0.3"
 	},
 	"dependencies": {
-		"bebras": "^0.7.1"
+		"bebras": "^0.7.2"
 	}
 }
