@@ -1,6 +1,6 @@
 {
 	"name": "bebras-vscode",
-	"version": "0.7.3",
+	"version": "0.7.5",
 	"displayName": "VS Code Support for Bebras Tasks",
 	"description": "Support for Bebras task edition in Markdown",
 	"publisher": "bebras-ch",
@@ -239,10 +239,10 @@
 		"jsrender": "^1.0.11",
 		"mocha": "^9.0.3"
 	},
-	"dependencies": {
-		"bebras": "^0.7.3"
-	},
 	"allowScripts": {
 		"fsevents@2.3.2": true
+	},
+	"dependencies": {
+		"bebras": "^0.7.5"
 	}
 }
