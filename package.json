@@ -1,6 +1,6 @@
 {
 	"name": "bebras-vscode",
-	"version": "0.7.5",
+	"version": "0.7.6",
 	"displayName": "VS Code Support for Bebras Tasks",
 	"description": "Support for Bebras task edition in Markdown",
 	"publisher": "bebras-ch",
@@ -32,13 +32,21 @@
 					"title": "Auto-export LaTeX on save",
 					"type": "boolean",
 					"default": false,
-					"description": "Exports the LaTeX version of the tasks on each save."
+					"description": "Export the LaTeX version of the tasks on each save."
 				},
 				"bebras.autoExportServerOnSave": {
 					"title": "Auto-export server version on save",
 					"type": "boolean",
 					"default": false,
-					"description": "Exports the server version of the tasks on each save."
+					"order": 20,
+					"description": "Export the server version of the tasks on each save. The synchronized fields must be explicitly set in a Bebras config file."
+				},
+				"bebras.autoUploadServerOnSave": {
+					"title": "Auto-upload server version on save",
+					"type": "boolean",
+					"default": false,
+					"order": 24,
+					"description": "Upload the server version of the tasks on each save. Will only run if the access keys have been configured and if auto-export on save is enabled. The synchronized fields must be explicitly set in a Bebras config file."
 				},
 				"bebras.openExportedFilesInVSCode": {
 					"title": "Always use VS Code when opening exported files",
@@ -131,6 +139,15 @@
 				}
 			},
 			{
+				"command": "bebrasmd.uploadServerHtml",
+				"category": "Bebras",
+				"title": "Upload HTML task to server",
+				"icon": {
+					"light": "./images/upload-light.svg",
+					"dark": "./images/upload-dark.svg"
+				}
+			},
+			{
 				"command": "bebrasmd.openDiscord",
 				"category": "Bebras",
 				"title": "Opens the Discord channel linked to this task",
@@ -179,11 +196,6 @@
 					"group": "navigation"
 				},
 				{
-					"command": "bebrasmd.exportCuttleHtml",
-					"when": "resourceScheme == file && resourceFilename =~ /.*\\.task\\.md$/",
-					"group": "navigation"
-				},
-				{
 					"command": "bebrasmd.exportPdf",
 					"when": "resourceScheme == file && resourceFilename =~ /.*\\.task\\.md$/",
 					"group": "navigation"
@@ -194,7 +206,7 @@
 					"group": "navigation"
 				},
 				{
-					"command": "bebrasmd.openDiscord",
+					"command": "bebrasmd.uploadServerHtml",
 					"when": "resourceScheme == file && resourceFilename =~ /.*\\.task\\.md$/",
 					"group": "navigation"
 				}
@@ -243,6 +255,6 @@
 		"fsevents@2.3.2": true
 	},
 	"dependencies": {
-		"bebras": "^0.7.5"
+		"bebras": "^0.7.6"
 	}
 }

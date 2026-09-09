@@ -32,13 +32,13 @@ async function getAuthorCompletions(folderPath: string): Promise<string[]> {
 			}
 		}
 		if (!needsReload) {
-			// console.log("using cached completions for: ", folderPath)
+			// log("using cached completions for: ", folderPath)
 			return completions.completions
 		}
 	}
 
 	if (fs.existsSync(completionFile)) {
-		// console.log("loading completions from: ", completionFile)
+		// log("loading completions from: ", completionFile)
 		const stats = fs.statSync(completionFile)
 		const lines = await fs.promises.readFile(completionFile, "utf8")
 		const completionLines = lines.split(/\r?\n/).filter(l => l.length > 0)
@@ -49,7 +49,7 @@ async function getAuthorCompletions(folderPath: string): Promise<string[]> {
 		AuthorCompletionCache.set(folderPath, completions)
 		return completionLines
 	} else {
-		console.log("Missing authors completion file: ", completionFile)
+		log("Missing authors completion file: ", completionFile)
 		return []
 	}
 }
@@ -65,19 +65,19 @@ export async function getDiscordLink(folderPath: string, taskId: string): Promis
 		// load from file
 		const channelsFile = path.join(folderPath, "discord_channels.json")
 		if (!fs.existsSync(channelsFile)) {
-			console.log("missing file: ", channelsFile)
+			log("missing file: ", channelsFile)
 			return undefined
 		}
 		const content = await fs.promises.readFile(channelsFile, "utf8")
 		const channelsData = JSON.parse(content)
 		let channelIds
 		if (!isString(channelsData.urlPattern) || !isString(channelsData.serverId) || ((channelIds = channelsData.channelIds) === null) || typeof channelIds !== "object") {
-			console.log("malformed JSON: ", channelsData)
-			console.log(!isString(channelsData.urlPattern))
-			console.log(!isString(channelsData.serverId))
-			console.log(channelsData.channelIds)
-			console.log(channelIds = channelsData.channelIds === null)
-			console.log(typeof channelIds !== "object")
+			log("malformed JSON: ", channelsData)
+			log(!isString(channelsData.urlPattern))
+			log(!isString(channelsData.serverId))
+			log(channelsData.channelIds)
+			log(channelIds = channelsData.channelIds === null)
+			log(typeof channelIds !== "object")
 			return undefined
 		}
 
@@ -215,12 +215,20 @@ function didSaveTextDocument(doc: vscode.TextDocument) {
 
 		const autoExportLatex = settingsConfig.get("autoExportLatexOnSave", false as boolean)
 		if (autoExportLatex) {
+			log("Auto-exporting to LaTeX on save")
 			vscode.commands.executeCommand("bebrasmd.exportTex", { neverOpenAfterExport: true })
 		}
 
 		const autoExportServer = settingsConfig.get("autoExportServerOnSave", false as boolean)
 		if (autoExportServer) {
-			vscode.commands.executeCommand("bebrasmd.exportServerHtml", { neverOpenAfterExport: true })
+			log("Auto-exporting to server on save")
+			vscode.commands.executeCommand("bebrasmd.exportServerHtml").then(() => {
+				const autoUploadServer = settingsConfig.get("autoUploadServerOnSave", false as boolean)
+				if (autoUploadServer) {
+					log("Auto-uploading to server on save")
+					vscode.commands.executeCommand("bebrasmd.uploadServerHtml")
+				}
+			})
 		}
 	}
 }
@@ -231,6 +239,21 @@ function didCloseTextDocument(document: vscode.TextDocument) {
 	diagnosticCollection.delete(document.uri)
 }
 
+
+let output: vscode.OutputChannel
+
+function log(...msg: any[]) {
+	if (output) {
+		output.appendLine(msg.join(" "))
+	}
+	console.log(...msg)
+}
+
+function logWithStatusBar(msg: string, duration: number) {
+	log(msg)
+	vscode.window.setStatusBarMessage(msg, duration)
+}
+
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
@@ -239,8 +262,8 @@ export function activate(context: vscode.ExtensionContext) {
 	const extensionDisplayName = "bebras-vscode"
 
 	// Create OutputChannel
-	const outputChannel = vscode.window.createOutputChannel(extensionDisplayName)
-	context.subscriptions.push(outputChannel)
+	output = vscode.window.createOutputChannel(extensionDisplayName)
+	context.subscriptions.push(output)
 
 	// Hook up to workspace events
 	context.subscriptions.push(
@@ -267,15 +290,15 @@ export function activate(context: vscode.ExtensionContext) {
 	function loggingErrors<Args extends any[]>(promiseFct: (...args: Args) => Promise<void>): (...args: Args) => Promise<void> {
 		return (...args) => {
 			const p = promiseFct(...args)
-			return p.catch(err => console.log(err))
+			return p.catch(err => { log(err); console.error(err) })
 		}
 	}
 
 	const authorCompletion = {
 		async provideCompletionItems(doc: vscode.TextDocument, pos: vscode.Position, cancel: vscode.CancellationToken, ctx: vscode.CompletionContext): Promise<vscode.CompletionItem[]> {
-			// console.log("authorCompletion.provideCompletionItems")
+			// log("authorCompletion.provideCompletionItems")
 			if (!isTask(doc)) {
-				// console.log(" -> not a task")
+				// log(" -> not a task")
 				return []
 			}
 
@@ -283,17 +306,17 @@ export function activate(context: vscode.ExtensionContext) {
 			const line = doc.lineAt(pos)
 			const match = /^\s*\-?\s*(?<filter>.*?)(?:\s+\(.*)?$/.exec(line.text)
 			if (!match) {
-				// console.log(" -> no match")
+				// log(" -> no match")
 				return []
 			}
 
 			// const filter = match.groups?.filter?.toLowerCase()
-			// console.log(`filter: '${filter}'`)
+			// log(`filter: '${filter}'`)
 
 			const folderPath = usualFolderWithAllTasksContaining(doc.uri.fsPath)
-			// console.log("folderPath: ", folderPath)
+			// log("folderPath: ", folderPath)
 			const authors = await getAuthorCompletions(folderPath)
-			// console.log("authors: ", authors)
+			// log("authors: ", authors)
 			// const completionAuthors = !filter
 			// 	? authors
 			// 	: authors.filter(auth => auth.toLowerCase().startsWith(filter))
@@ -321,7 +344,8 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('bebrasmd.exportPdf', loggingErrors(makeExportHandler("pdf"))),
 		vscode.commands.registerCommand('bebrasmd.exportTex', loggingErrors(makeExportHandler("tex"))),
 		vscode.commands.registerCommand('bebrasmd.exportTexAndOpen', loggingErrors(makeExportHandler("tex", true))),
-		vscode.commands.registerCommand('bebrasmd.exportServerHtml', loggingErrors(mergeToServer)),
+		vscode.commands.registerCommand('bebrasmd.exportServerHtml', loggingErrors(mergeToServerFile)),
+		vscode.commands.registerCommand('bebrasmd.uploadServerHtml', loggingErrors(uploadToServer)),
 		vscode.commands.registerCommand('bebrasmd.formatTable', loggingErrors(formatTable)),
 		vscode.commands.registerCommand('bebrasmd.openDiscord', loggingErrors(openDiscord)),
 		vscode.languages.registerCompletionItemProvider(taskDocSelector, authorCompletion),
@@ -338,11 +362,11 @@ export function activate(context: vscode.ExtensionContext) {
 			break
 		}
 	}
-	// console.log(" =>> last active editor: " + lastActiveTaskEditor?.document.uri.fsPath)
+	// log(" =>> last active editor: " + lastActiveTaskEditor?.document.uri.fsPath)
 	vscode.window.onDidChangeActiveTextEditor(editor => {
 		if (editor && isTask(editor.document)) {
 			lastActiveTaskEditor = editor
-			// console.log(" =>> last active editor: " + editor.document.uri.fsPath)
+			// log(" =>> last active editor: " + editor.document.uri.fsPath)
 		}
 	})
 
@@ -351,16 +375,17 @@ export function activate(context: vscode.ExtensionContext) {
 			try {
 
 				md = md.use(bebras.markdownitPlugin.plugin(() => {
-					// console.log("Active: " + vscode.window.activeTextEditor?.document.uri.fsPath)
-					// console.log("Last:   " + lastActiveTaskEditor?.document.uri.fsPath)
+					// log("Active: " + vscode.window.activeTextEditor?.document.uri.fsPath)
+					// log("Last:   " + lastActiveTaskEditor?.document.uri.fsPath)
 					const taskFile = (vscode.window.activeTextEditor ?? lastActiveTaskEditor)?.document.uri.fsPath ?? ""
 					const basePath = path.dirname(taskFile)
-					// console.log("++ basePath: " + basePath)
+					// log("++ basePath: " + basePath)
 					const context: PluginContext = { taskFile, basePath, setOptionsFromMetadata: true }
 					return context
 				}))
 				md.set({ quotes: getConfigCustomQuotes() })
 			} catch (e) {
+				log(e)
 				console.error(e)
 			}
 			return md
@@ -393,7 +418,7 @@ export class BebrasQuickFixProvider implements vscode.CodeActionProvider {
 	}
 
 	private createCommandCodeActions(doc: vscode.TextDocument, diag: vscode.Diagnostic, range: vscode.Range | vscode.Selection): vscode.CodeAction[] {
-		// console.log("diag", diag)
+		// log("diag", diag)
 		const quickFix: undefined | QuickFix = (diag as any).quickFix
 		if (!quickFix) {
 			return []
@@ -491,7 +516,7 @@ function getConfigCustomQuotes(): [string, string] | [string, string, string, st
 	return undefined
 }
 
-async function mergeToServer() {
+async function mergeToServerFile() {
 	const editor = vscode.window.activeTextEditor
 	if (!editor) {
 		return
@@ -503,15 +528,48 @@ async function mergeToServer() {
 	}
 
 	const taskFile = doc.uri.fsPath
+	const folder = path.dirname(taskFile)
+	const config = bebras.fsutil.loadBebrasConfig(folder)
 
 	const server = bebras.cli.bebras_server
-	const [taskSpecs, context] = server.buildTaskSpecsFromFiles([taskFile], false)
+	const [taskSpecs, context] = server.buildTaskSpecsFromFiles([taskFile], config, false)
 
-	const modifiedFiles = await server.runInsertTaskOn(taskSpecs, ["answer", "itsinformatics"], true, false, context)
+	const sections = context.config.vscode.autoExport
+	log("Merging to server file: " + taskSpecs[0].taskIdWithLang + " with sections " + sections.join(", "))
+	const modifiedFiles = await server.runInsertTaskOn(taskSpecs, sections, true, false, context)
 	if (modifiedFiles.length !== 0) {
-		vscode.window.setStatusBarMessage("Wrote " + modifiedFiles[0], 2000)
+		logWithStatusBar("Wrote " + modifiedFiles[0] + " with sections " + sections.join(", "), 2000)
+	} else {
+		log("No files modified in server folder")
+	}
+}
+
+async function uploadToServer() {
+	const editor = vscode.window.activeTextEditor
+	if (!editor) {
+		return
 	}
 
+	const doc = editor.document
+	if (!isTask(doc)) {
+		return
+	}
+
+	const taskFile = doc.uri.fsPath
+	const folder = path.dirname(taskFile)
+	const config = bebras.fsutil.loadBebrasConfig(folder)
+
+	const server = bebras.cli.bebras_server
+	const [taskSpecs, context] = server.buildTaskSpecsFromFiles([taskFile], config, false)
+
+	const sections = context.config.vscode.autoUpload
+	log("Uploading to server: " + taskSpecs[0].taskIdWithLang + " with sections " + sections.join(", "))
+	try {
+		await server.runUploadTaskOn(taskSpecs, sections, context)
+		logWithStatusBar("Uploaded to server: " + taskSpecs[0].taskIdWithLang + " with sections " + sections.join(", "), 2000)
+	} catch (error) {
+		log("Error uploading to server: ", error)
+	}
 }
 
 function makeExportHandler(outputFormat: bebras.util.OutputFormat, forceOpenAfterExport: boolean = false) {
@@ -566,6 +624,7 @@ function makeExportHandler(outputFormat: bebras.util.OutputFormat, forceOpenAfte
 		}
 
 		vscode.window.withProgress({ location: vscode.ProgressLocation.Window }, async (progress) => {
+			log("Converting task to " + outputFormat + ": " + taskFile + " -> " + outFile)
 			progress.report({
 				message: `Converting task to ` + outputFormat,
 			})
@@ -578,10 +637,12 @@ function makeExportHandler(outputFormat: bebras.util.OutputFormat, forceOpenAfte
 				}
 
 				const writtenPath: string | true = await conversionFct(taskFile, outFile, customOptions)
+				log("Conversion done, written to: " + writtenPath)
+
 				if (writtenPath === true) {
 					// written to stdout, shouldn't be the case from the plugin
 				} else {
-					vscode.window.setStatusBarMessage("Wrote " + formatRelativePathFor(outFile, taskFile), 2000)
+					logWithStatusBar("Wrote " + formatRelativePathFor(outFile, taskFile), 2000)
 					if (openAfterExport) {
 						const outFileUri = vscode.Uri.file(writtenPath)
 
@@ -616,6 +677,7 @@ function makeExportHandler(outputFormat: bebras.util.OutputFormat, forceOpenAfte
 					}
 				}
 			} catch (err) {
+				log(err)
 				console.error(err)
 			}
 		})
@@ -624,9 +686,9 @@ function makeExportHandler(outputFormat: bebras.util.OutputFormat, forceOpenAfte
 
 function focusEditorForOrOpenFile(uri: vscode.Uri) {
 	const wantedPath = uri.fsPath
-	// console.log("wantedPath: " + wantedPath)
+	// log("wantedPath: " + wantedPath)
 	for (const editor of vscode.window.visibleTextEditors) {
-		// console.log("editor:     " + editor.document.uri.fsPath)
+		// log("editor:     " + editor.document.uri.fsPath)
 		if (editor.document.uri.fsPath === wantedPath) {
 			vscode.window.showTextDocument(editor.document)
 			return
@@ -707,7 +769,7 @@ async function openDiscord() {
 	const taskFileName = path.basename(taskPath)
 	let match
 	if (!(match = bebras.patterns.taskFileName.exec(taskFileName))) {
-		console.log("malformed file name: " + taskFileName)
+		log("malformed file name: " + taskFileName)
 		return
 	}
 	const taskId = match.groups.id
