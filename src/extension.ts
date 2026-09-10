@@ -532,7 +532,7 @@ async function mergeToServerFile() {
 	const config = bebras.fsutil.loadBebrasConfig(folder)
 
 	const server = bebras.cli.bebras_server
-	const [taskSpecs, context] = server.buildTaskSpecsFromFiles([taskFile], config, false)
+	const [taskSpecs, context] = await server.buildTaskSpecsFromFiles([taskFile], config, false)
 
 	const sections = context.config.vscode.autoExport
 	log("Merging to server file: " + taskSpecs[0].taskIdWithLang + " with sections " + sections.join(", "))
@@ -560,12 +560,12 @@ async function uploadToServer() {
 	const config = bebras.fsutil.loadBebrasConfig(folder)
 
 	const server = bebras.cli.bebras_server
-	const [taskSpecs, context] = server.buildTaskSpecsFromFiles([taskFile], config, false)
+	const [taskSpecs, context] = await server.buildTaskSpecsFromFiles([taskFile], config, false)
 
 	const sections = context.config.vscode.autoUpload
 	log("Uploading to server: " + taskSpecs[0].taskIdWithLang + " with sections " + sections.join(", "))
 	try {
-		await server.runUploadTaskOn(taskSpecs, sections, context)
+		await server.runUploadTaskOn(taskSpecs, sections, false, context)
 		logWithStatusBar("Uploaded to server: " + taskSpecs[0].taskIdWithLang + " with sections " + sections.join(", "), 2000)
 	} catch (error) {
 		log("Error uploading to server: ", error)
