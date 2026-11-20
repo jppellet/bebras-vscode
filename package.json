@@ -1,6 +1,6 @@
 {
 	"name": "bebras-vscode",
-	"version": "0.7.10",
+	"version": "0.8.1",
 	"displayName": "VS Code Support for Bebras Tasks",
 	"description": "Support for Bebras task edition in Markdown",
 	"publisher": "bebras-ch",
@@ -148,6 +148,15 @@
 				}
 			},
 			{
+				"command": "bebrasmd.exportAndUploadServerHtml",
+				"category": "Bebras",
+				"title": "Export and upload HTML task to server",
+				"icon": {
+					"light": "./images/upload-light.svg",
+					"dark": "./images/upload-dark.svg"
+				}
+			},
+			{
 				"command": "bebrasmd.openDiscord",
 				"category": "Bebras",
 				"title": "Opens the Discord channel linked to this task",
@@ -157,9 +166,9 @@
 				}
 			},
 			{
-				"command": "bebrasmd.formatTable",
+				"command": "bebrasmd.prettifyTable",
 				"category": "Bebras",
-				"title": "Format Markdown table"
+				"title": "Prettify Markdown table"
 			}
 		],
 		"menus": {
@@ -206,21 +215,21 @@
 					"group": "navigation"
 				},
 				{
-					"command": "bebrasmd.uploadServerHtml",
+					"command": "bebrasmd.exportAndUploadServerHtml",
 					"when": "resourceScheme == file && resourceFilename =~ /.*\\.task\\.md$/",
 					"group": "navigation"
 				}
 			],
 			"editor/context": [
 				{
-					"command": "bebrasmd.formatTable",
+					"command": "bebrasmd.prettifyTable",
 					"when": "resourceScheme == file && resourceFilename =~ /.*\\.task\\.md$/"
 				}
 			]
 		},
 		"keybindings": [
 			{
-				"command": "bebrasmd.formatTable",
+				"command": "bebrasmd.prettifyTable",
 				"key": "ctrl+alt+meta+f",
 				"when": "editorTextFocus"
 			}
@@ -252,9 +261,10 @@
 		"mocha": "^9.0.3"
 	},
 	"allowScripts": {
-		"fsevents@2.3.2": true
+		"fsevents": true,
+		"puppeteer": true
 	},
 	"dependencies": {
-		"bebras": "^0.7.10"
+		"bebras": "file:../bebras"
 	}
 }

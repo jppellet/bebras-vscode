@@ -6,6 +6,7 @@ import * as bebras from 'bebras'
 import { QuickFix } from 'bebras/out/check'
 import { PluginOptions } from 'bebras/out/convert_html'
 import { PluginContext } from 'bebras/out/convert_html_markdownit'
+import { WriteResult } from 'bebras/out/fsutil'
 import { tableHeaderOrSepPattern } from 'bebras/out/patterns'
 import { isString, isUndefined, mkStringCommaAnd } from 'bebras/out/util'
 import * as fs from 'fs'
@@ -192,9 +193,64 @@ const throttle = {
 const throttleDuration = 500
 
 let diagnosticCollection: vscode.DiagnosticCollection
+let taskStatusBarItem: vscode.StatusBarItem
+let taskStatusBarUpdateRequest = 0
+const OpenTaskStatusCommand = "bebrasmd.openTaskStatus"
+
+async function getTaskStatusText(taskFile: string): Promise<string> {
+	console.log("getTaskStatusText for: ", taskFile)
+	const ok = "$(check)"
+	const notok = "$(error)"
+	const unknown = "$(question)"
+	return `$(cloud) Cuttle: ${ok}Q  ${notok}A  ${unknown}T  ${ok} I  2 min ago`
+}
+
+async function updateTaskStatusBarFor(doc: vscode.TextDocument | undefined) {
+	const updateRequest = ++taskStatusBarUpdateRequest
+
+	if (!doc || !isTaskDocument(doc)) {
+		taskStatusBarItem.hide()
+		return
+	}
+
+	const taskFile = doc.uri.fsPath
+	const text = await getTaskStatusText(taskFile)
+	if (updateRequest !== taskStatusBarUpdateRequest) {
+		return
+	}
+
+	taskStatusBarItem.text = `    ${text}    `
+	taskStatusBarItem.tooltip = "Cuttle Sync"
+	taskStatusBarItem.command = OpenTaskStatusCommand
+	// taskStatusBarItem.show() // TODO 
+}
+
+async function openTaskStatus() {
+	const doc = vscode.window.activeTextEditor?.document
+	if (!doc || !isTaskDocument(doc)) {
+		return
+	}
+
+	const taskFile = doc.uri.fsPath
+	// show a webview panel with the status of the task on Cuttle
+	const panel = vscode.window.createWebviewPanel(
+		"taskStatus",
+		"Task Status",
+		vscode.ViewColumn.One,
+		{}
+	)
+	panel.webview.html = `<html><body><h3>Status: ${taskFile}</h3></body></html>`
+}
 
 function didChangeVisibleTextEditors(textEditors: vscode.TextEditor[]) {
 	textEditors.forEach((textEditor) => lint(textEditor.document))
+}
+
+// Handles the onDidOpenTextDocument event
+function didOpenTextDocument(doc: vscode.TextDocument) {
+	if (vscode.window.activeTextEditor?.document === doc) {
+		updateTaskStatusBarFor(doc)
+	}
 }
 
 // Handles the onDidChangeTextDocument event
@@ -205,14 +261,33 @@ function didChangeTextDocument(change: vscode.TextDocumentChangeEvent) {
 	}
 }
 
+async function exportAndUploadToServer(doExport: boolean, doUpload: boolean) {
+	if (!doExport) {
+		return
+	}
+
+	log("Exporting to Cuttle HTML")
+	await vscode.commands.executeCommand("bebrasmd.exportServerHtml")
+
+	if (!doUpload) {
+		return
+	}
+
+	log("Uploading to Cuttle server")
+	await vscode.commands.executeCommand("bebrasmd.uploadServerHtml")
+}
+
 // Handles the onDidSaveTextDocument event
 function didSaveTextDocument(doc: vscode.TextDocument) {
 	if (isTaskDocument(doc)) {
+		if (vscode.window.activeTextEditor?.document === doc) {
+			updateTaskStatusBarFor(doc)
+		}
+
 		lint(doc)
 		suppressLint(doc)
 
 		const settingsConfig = vscode.workspace.getConfiguration("bebras")
-
 		const autoExportLatex = settingsConfig.get("autoExportLatexOnSave", false as boolean)
 		if (autoExportLatex) {
 			log("Auto-exporting to LaTeX on save")
@@ -220,16 +295,9 @@ function didSaveTextDocument(doc: vscode.TextDocument) {
 		}
 
 		const autoExportServer = settingsConfig.get("autoExportServerOnSave", false as boolean)
-		if (autoExportServer) {
-			log("Auto-exporting to server on save")
-			vscode.commands.executeCommand("bebrasmd.exportServerHtml").then(() => {
-				const autoUploadServer = settingsConfig.get("autoUploadServerOnSave", false as boolean)
-				if (autoUploadServer) {
-					log("Auto-uploading to server on save")
-					vscode.commands.executeCommand("bebrasmd.uploadServerHtml")
-				}
-			})
-		}
+		const autoUploadServer = settingsConfig.get("autoUploadServerOnSave", false as boolean)
+
+		exportAndUploadToServer(autoExportServer, autoUploadServer)
 	}
 }
 
@@ -268,10 +336,14 @@ export function activate(context: vscode.ExtensionContext) {
 	// Hook up to workspace events
 	context.subscriptions.push(
 		vscode.window.onDidChangeVisibleTextEditors(didChangeVisibleTextEditors),
+		vscode.workspace.onDidOpenTextDocument(didOpenTextDocument),
 		vscode.workspace.onDidChangeTextDocument(didChangeTextDocument),
 		vscode.workspace.onDidSaveTextDocument(didSaveTextDocument),
 		vscode.workspace.onDidCloseTextDocument(didCloseTextDocument),
 	)
+
+	taskStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 1000)
+	context.subscriptions.push(taskStatusBarItem)
 
 	// Create DiagnosticCollection
 	diagnosticCollection = vscode.languages.createDiagnosticCollection(extensionDisplayName)
@@ -286,6 +358,7 @@ export function activate(context: vscode.ExtensionContext) {
 	if (vscode.window.activeTextEditor) {
 		requestLint(vscode.window.activeTextEditor.document)
 	}
+	updateTaskStatusBarFor(vscode.window.activeTextEditor?.document)
 
 	function loggingErrors<Args extends any[]>(promiseFct: (...args: Args) => Promise<void>): (...args: Args) => Promise<void> {
 		return (...args) => {
@@ -346,9 +419,12 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('bebrasmd.exportTexAndOpen', loggingErrors(makeExportHandler("tex", true))),
 		vscode.commands.registerCommand('bebrasmd.exportServerHtml', loggingErrors(mergeToServerFile)),
 		vscode.commands.registerCommand('bebrasmd.uploadServerHtml', loggingErrors(uploadToServer)),
-		vscode.commands.registerCommand('bebrasmd.formatTable', loggingErrors(formatTable)),
+		vscode.commands.registerCommand('bebrasmd.exportAndUploadServerHtml', loggingErrors(() => exportAndUploadToServer(true, true))),
+		vscode.commands.registerCommand('bebrasmd.prettifyTable', loggingErrors(prettifyTable)),
 		vscode.commands.registerCommand('bebrasmd.openDiscord', loggingErrors(openDiscord)),
+		vscode.commands.registerCommand(OpenTaskStatusCommand, loggingErrors(openTaskStatus)),
 		vscode.languages.registerCompletionItemProvider(taskDocSelector, authorCompletion),
+		vscode.languages.registerDocumentFormattingEditProvider(taskDocSelector, prettifyDocument()),
 		vscode.languages.registerCodeActionsProvider(taskDocSelector, new BebrasQuickFixProvider(), {
 			providedCodeActionKinds: BebrasQuickFixProvider.providedCodeActionKinds,
 		}),
@@ -363,12 +439,13 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}
 	// log(" =>> last active editor: " + lastActiveTaskEditor?.document.uri.fsPath)
-	vscode.window.onDidChangeActiveTextEditor(editor => {
+	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
+		updateTaskStatusBarFor(editor?.document)
 		if (editor && isTask(editor.document)) {
 			lastActiveTaskEditor = editor
 			// log(" =>> last active editor: " + editor.document.uri.fsPath)
 		}
-	})
+	}))
 
 	return {
 		extendMarkdownIt(md: any) {
@@ -392,6 +469,24 @@ export function activate(context: vscode.ExtensionContext) {
 		},
 	}
 
+}
+
+function prettifyDocument(): vscode.DocumentFormattingEditProvider {
+	return {
+		provideDocumentFormattingEdits(document: vscode.TextDocument): vscode.TextEdit[] {
+			const path = document.uri.fsPath
+			let formatted: string
+			try {
+				formatted = bebras.prettify.prettifyTask(path, document.getText(), eolIn(document))
+			} catch (e) {
+				log("Error prettifying document: ", e)
+				console.error(e)
+				throw e
+			}
+			const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length))
+			return [vscode.TextEdit.replace(fullRange, formatted)]
+		},
+	}
 }
 
 function usualFolderWithAllTasksContaining(taskPath: string) {
@@ -535,7 +630,7 @@ async function mergeToServerFile() {
 	const [taskSpecs, context] = await server.buildTaskSpecsFromFiles([taskFile], config, false)
 
 	const sections = context.config.vscode.autoExport
-	log("Merging to server file: " + taskSpecs[0].taskIdWithLang + " with sections " + sections.join(", "))
+	log("Merging to server file: " + taskSpecs[0].idWithLang + " with sections " + sections.join(", "))
 	const modifiedFiles = await server.runInsertTaskOn(taskSpecs, sections, true, false, context)
 	if (modifiedFiles.length !== 0) {
 		logWithStatusBar("Wrote " + modifiedFiles[0] + " with sections " + sections.join(", "), 2000)
@@ -563,10 +658,14 @@ async function uploadToServer() {
 	const [taskSpecs, context] = await server.buildTaskSpecsFromFiles([taskFile], config, false)
 
 	const sections = context.config.vscode.autoUpload
-	log("Uploading to server: " + taskSpecs[0].taskIdWithLang + " with sections " + sections.join(", "))
+	log("Uploading to server: " + taskSpecs[0].idWithLang + " with sections " + sections.join(", "))
 	try {
-		await server.runUploadTaskOn(taskSpecs, sections, false, context)
-		logWithStatusBar("Uploaded to server: " + taskSpecs[0].taskIdWithLang + " with sections " + sections.join(", "), 2000)
+		const result = await server.runUploadTaskOn(taskSpecs, sections, false, context)
+		if (result.numSyncedTasks === 0) {
+			logWithStatusBar(`Task was not uploaded to server; check output for details`, 4000)
+			return
+		}
+		logWithStatusBar(`Uploaded to server ${taskSpecs[0].idWithLang} with sections ${[...result.htmlFields, ...result.metadataFields].join(", ")} and ${result.numUploadedImages} uploaded images`, 4000)
 	} catch (error) {
 		log("Error uploading to server: ", error)
 	}
@@ -636,15 +735,16 @@ function makeExportHandler(outputFormat: bebras.util.OutputFormat, forceOpenAfte
 					customOptions.customQuotes = customQuotes
 				}
 
-				const writtenPath: string | true = await conversionFct(taskFile, outFile, customOptions)
-				log("Conversion done, written to: " + writtenPath)
+				const writtenPath: WriteResult = await conversionFct(taskFile, outFile, customOptions)
 
-				if (writtenPath === true) {
+				if ("type" in writtenPath && writtenPath.type === "stdout") {
 					// written to stdout, shouldn't be the case from the plugin
 				} else {
-					logWithStatusBar("Wrote " + formatRelativePathFor(outFile, taskFile), 2000)
+					const numOtherFiles = (Array.isArray(writtenPath) ? writtenPath.length - 1 : 0)
+					logWithStatusBar("Wrote " + formatRelativePathFor(outFile, taskFile) + (numOtherFiles === 0 ? "" : ` + ${numOtherFiles} file${numOtherFiles === 1 ? '' : 's'} `), 2000)
 					if (openAfterExport) {
-						const outFileUri = vscode.Uri.file(writtenPath)
+						const mainWrittenFile = (Array.isArray(writtenPath) ? writtenPath[0] : writtenPath).file
+						const outFileUri = vscode.Uri.file(mainWrittenFile)
 
 						let openInternal: boolean
 						const openInternalSetting = String(vscode.workspace.getConfiguration("bebras").get("openExportedFilesInVSCode", "Only text files" as string))
@@ -705,7 +805,7 @@ function eolIn(doc: vscode.TextDocument): string {
 	return "\n"
 }
 
-async function formatTable() {
+async function prettifyTable() {
 	const editor = vscode.window.activeTextEditor
 	if (!editor) {
 		return
@@ -746,7 +846,7 @@ async function formatTable() {
 	const range = new vscode.Range(new vscode.Position(startLine, 0), new vscode.Position(endLine + 1, 0))
 	const tableText = doc.getText(range)
 	editor.edit(builder => {
-		const newText = bebras.check.formatTable(tableText, eolIn(doc))
+		const newText = bebras.prettify.prettifyTable(tableText, eolIn(doc))
 		builder.replace(range, newText)
 		const numNewLines = newText.split(/\r?\n/).length
 		editor.selection = new vscode.Selection(range.start, new vscode.Position(range.start.line + numNewLines - 1, 0))
