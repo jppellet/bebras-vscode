@@ -848,8 +848,14 @@ async function prettifyTable() {
 	editor.edit(builder => {
 		const newText = bebras.prettify.prettifyTable(tableText, eolIn(doc))
 		builder.replace(range, newText)
-		const numNewLines = newText.split(/\r?\n/).length
-		editor.selection = new vscode.Selection(range.start, new vscode.Position(range.start.line + numNewLines - 1, 0))
+		const newLines = newText.split(/\r?\n/)
+		const numNewLines = newLines.length
+		const lastLineLength = newLines[numNewLines - 1].length
+		const lastLineEmpty = lastLineLength === 0
+		const endPos = lastLineEmpty
+			? new vscode.Position(range.start.line + numNewLines - 2, newLines[numNewLines - 2].length)
+			: new vscode.Position(range.start.line + numNewLines - 1, lastLineLength)
+		editor.selection = new vscode.Selection(range.start, endPos)
 	})
 }
 
