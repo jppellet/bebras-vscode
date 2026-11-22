@@ -1,6 +1,6 @@
 {
 	"name": "bebras-vscode",
-	"version": "0.8.1",
+	"version": "0.9.0",
 	"displayName": "VS Code Support for Bebras Tasks",
 	"description": "Support for Bebras task edition in Markdown",
 	"publisher": "bebras-ch",
@@ -22,6 +22,42 @@
 		"configuration": {
 			"title": "Bebras",
 			"properties": {
+				"bebras.prettifyOnSave": {
+					"title": "Prettify task files on save",
+					"type": "boolean",
+					"default": true,
+					"description": "Automatically prettify *.task.md files before saving."
+				},
+				"bebras.prettifyOptions.preamble": {
+					"title": "Prettify task preamble",
+					"type": "boolean",
+					"default": true,
+					"description": "Remove empty lines in the preamble and ensure proper indentation."
+				},
+				"bebras.prettifyOptions.tables": {
+					"title": "Prettify task tables",
+					"type": "boolean",
+					"default": true,
+					"description": "Align table cells and separators."
+				},
+				"bebras.prettifyOptions.imageDefs": {
+					"title": "Prettify task image definitions",
+					"type": "boolean",
+					"default": true,
+					"description": "Align image definitions in blocks."
+				},
+				"bebras.prettifyOptions.sections": {
+					"title": "Prettify task sections",
+					"type": "boolean",
+					"default": true,
+					"description": "Ensure proper spacing around section titles."
+				},
+				"bebras.prettifyOptions.emptyLines": {
+					"title": "Prettify task empty lines",
+					"type": "boolean",
+					"default": true,
+					"description": "Remove excessive empty lines."
+				},
 				"bebras.strictChecks": {
 					"title": "Strict checks (including metadata for bebras-web)",
 					"type": "boolean",
@@ -265,6 +301,6 @@
 		"puppeteer": true
 	},
 	"dependencies": {
-		"bebras": "file:../bebras"
+		"bebras": "^0.9.0"
 	}
 }

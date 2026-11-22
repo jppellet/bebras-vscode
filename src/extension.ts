@@ -301,6 +301,46 @@ function didSaveTextDocument(doc: vscode.TextDocument) {
 	}
 }
 
+function getPrettifyOptions(): bebras.prettify.PrettifyOptions {
+	const settings = vscode.workspace.getConfiguration("bebras")
+	const options = bebras.prettify.defaultPrettifyOptions()
+	for (const key of Object.keys(options) as (keyof typeof options)[]) {
+		options[key] = settings.get(`prettifyOptions.${key}`, options[key]) as boolean
+	}
+	// log("Prettify options: " + JSON.stringify(options, null, 2))
+	return options
+}
+
+function prettifyTaskDocument(document: vscode.TextDocument): string {
+	return bebras.prettify.prettifyTask(
+		document.uri.fsPath,
+		document.getText(),
+		eolIn(document),
+		getPrettifyOptions(),
+	)
+}
+
+function prettifyOnSave(event: vscode.TextDocumentWillSaveEvent) {
+	const doc = event.document
+	if (!isTaskDocument(doc)) {
+		return
+	}
+
+	const settings = vscode.workspace.getConfiguration("bebras")
+	if (!settings.get("prettifyOnSave", true as boolean)) {
+		return
+	}
+
+	const text = doc.getText()
+	const formatted = prettifyTaskDocument(doc)
+	event.waitUntil(Promise.resolve([
+		vscode.TextEdit.replace(
+			new vscode.Range(doc.positionAt(0), doc.positionAt(text.length)),
+			formatted,
+		),
+	]))
+}
+
 // Handles the onDidCloseTextDocument event
 function didCloseTextDocument(document: vscode.TextDocument) {
 	suppressLint(document)
@@ -339,6 +379,7 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.workspace.onDidOpenTextDocument(didOpenTextDocument),
 		vscode.workspace.onDidChangeTextDocument(didChangeTextDocument),
 		vscode.workspace.onDidSaveTextDocument(didSaveTextDocument),
+		vscode.workspace.onWillSaveTextDocument(prettifyOnSave),
 		vscode.workspace.onDidCloseTextDocument(didCloseTextDocument),
 	)
 
@@ -474,16 +515,16 @@ export function activate(context: vscode.ExtensionContext) {
 function prettifyDocument(): vscode.DocumentFormattingEditProvider {
 	return {
 		provideDocumentFormattingEdits(document: vscode.TextDocument): vscode.TextEdit[] {
-			const path = document.uri.fsPath
+			const text = document.getText()
 			let formatted: string
 			try {
-				formatted = bebras.prettify.prettifyTask(path, document.getText(), eolIn(document))
+				formatted = prettifyTaskDocument(document)
 			} catch (e) {
 				log("Error prettifying document: ", e)
 				console.error(e)
 				throw e
 			}
-			const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length))
+			const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(text.length))
 			return [vscode.TextEdit.replace(fullRange, formatted)]
 		},
 	}
