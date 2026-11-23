@@ -1,6 +1,6 @@
 {
 	"name": "bebras-vscode",
-	"version": "0.9.0",
+	"version": "0.9.1",
 	"displayName": "VS Code Support for Bebras Tasks",
 	"description": "Support for Bebras task edition in Markdown",
 	"publisher": "bebras-ch",
@@ -301,6 +301,6 @@
 		"puppeteer": true
 	},
 	"dependencies": {
-		"bebras": "^0.9.0"
+		"bebras": "^0.9.1"
 	}
 }
